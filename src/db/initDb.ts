@@ -1,17 +1,16 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { logSuccess, logError } from '../utils/logger';
 dotenv.config();
-
-
 
 export const connectDb = async (): Promise<void> => {
   try {
     await mongoose.connect(process.env.MONGO_URI || '', {
       // useNewUrlParser and useUnifiedTopology are default in mongoose >= 6
     });
-    console.log('MongoDB connected successfully');
+    logSuccess('🗄️  MongoDB connected successfully');
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    logError('❌ MongoDB connection error:', error);
     process.exit(1);
   }
 };

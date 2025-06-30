@@ -1,5 +1,6 @@
 import RssUrl from '../models/rssUrls';
 import Category from '../models/categories';
+import { logInfo, logError, logSuccess, logDb } from '../utils/logger';
 
 const rssSources = [
   {
@@ -231,11 +232,14 @@ const rssSources = [
 export async function getRssUrls() {
   try {
     const rssUrls = await RssUrl.find({ isActive: true });
+    logDb('read', 'rssUrls', { count: rssUrls.length });
     return rssUrls;
   } catch (error) {
-    console.error('Error fetching RSS URLs:', error);
+    logError('Error fetching RSS URLs:', error);
+    return null;
   }
 }
+
 export async function insertRssUrls(rssSources: any) {
     try {
         // Flatten the nested arrays and remove duplicates based on name
@@ -248,29 +252,31 @@ export async function insertRssUrls(rssSources: any) {
             new Map(allCategories.map((item: any) => [item.name, item])).values()
         );
         
-        console.log('Total unique categories:', uniqueCategories.length);
+        logInfo('Total unique categories:', { count: uniqueCategories.length });
         
         // Check which categories already exist in the database
         const existingCategories = await Category.find({
             name: { $in: uniqueCategories.map((cat: any) => cat.name) }
         });
-        console.log('Existing categories:', existingCategories);
+        logInfo('Existing categories:', { count: existingCategories.length, categories: existingCategories.map(cat => cat.name) });
+        
         const existingCategoryNames = existingCategories.map((cat: any) => cat.name);
         const missingCategories = uniqueCategories.filter((cat: any) => 
             !existingCategoryNames.includes(cat.name)
         );
         
-        console.log(`Found ${existingCategories.length} existing categories`);
-        console.log(`Need to insert ${missingCategories.length} new categories`);
+        logInfo(`Found ${existingCategories.length} existing categories`);
+        logInfo(`Need to insert ${missingCategories.length} new categories`);
         
         let allCategoriesWithIds = [...existingCategories];
         
         // Insert only missing categories
-        console.log('Missing categories:', missingCategories.length);
+        logInfo('Missing categories:', { count: missingCategories.length });
         if (missingCategories.length > 0) {
             const insertCategories = await Category.insertMany(missingCategories);
             allCategoriesWithIds = [...allCategoriesWithIds, ...insertCategories];
-            console.log(`Inserted ${insertCategories.length} new categories`);
+            logDb('insert', 'categories', { count: insertCategories.length });
+            logSuccess(`Inserted ${insertCategories.length} new categories`);
         }
         
         for (const source of rssSources) {
@@ -289,13 +295,14 @@ export async function insertRssUrls(rssSources: any) {
             category: categories
         });
         }
-        console.log('RSS URLs seeding completed.');
+        logSuccess('RSS URLs seeding completed.');
+        logDb('insert', 'rssUrls', { sources: rssSources.length });
         return { 
           status: true,
           message: 'RSS URLs seeded successfully'
         }
     } catch (error) {
-        console.error('Error seeding RSS URLs:', error);
+        logError('Error seeding RSS URLs:', error);
         return {
           status: false,
           message: 'Error seeding RSS URLs'

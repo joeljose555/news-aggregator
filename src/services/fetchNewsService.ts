@@ -4,6 +4,7 @@ import Parser from 'rss-parser';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import rssUrls from '../models/rssUrls';
+import { logInfo, logError, logSuccess, logWarn, logDb } from '../utils/logger';
 
 // Configure parser to be more tolerant of malformed XML
 const parser = new Parser({
@@ -19,7 +20,7 @@ async function parseRssWithFallback(url: string) {
     // First try the standard parser
     return await parser.parseURL(url);
   } catch (error: any) {
-    console.log(`   ⚠️ Standard RSS parsing failed, trying alternative method for: ${url}`);
+    logWarn(`⚠️ Standard RSS parsing failed, trying alternative method for: ${url}`);
     
     try {
       // Fetch the raw XML and try to clean it
@@ -39,7 +40,7 @@ async function parseRssWithFallback(url: string) {
       // Try parsing the cleaned XML
       return await parser.parseString(xmlContent);
     } catch (fallbackError: any) {
-      console.error(`   ❌ Alternative RSS parsing also failed:`, fallbackError.message);
+      logError(`❌ Alternative RSS parsing also failed:`, fallbackError, { url });
       throw fallbackError;
     }
   }
@@ -49,42 +50,42 @@ export async function fetchAndSaveNews() {
   try {
     // Get all RSS URLs from the database
     const rssUrls = await RssUrl.find();
-    console.log(`Found ${rssUrls.length} RSS sources to process`);
+    logInfo(`📰 Found ${rssUrls.length} RSS sources to process`);
+    
     
     for (const rssUrlDoc of rssUrls) {
-      console.log(`Processing RSS source: ${rssUrlDoc.name}`);
+      logInfo(`📡 Processing RSS source: ${rssUrlDoc.name}`);
       
       // Process each category in the RSS source
       for (const category of rssUrlDoc.category) {
         try {
-          console.log(`  Processing category: ${category.name} - ${category.url}`);
+          logInfo(`  📂 Processing category: ${category.name}`, { url: category.url });
           
           // Add error handling for RSS parsing
           let feed;
           try {
             feed = await parseRssWithFallback(category.url);
           } catch (rssError: any) {
-            console.error(`❌ Failed to parse RSS feed for ${category}:`, rssError.message);
-            console.log(`   URL: ${category.url}`);
+            logError(`❌ Failed to parse RSS feed for ${category.name}:`, rssError, { url: category.url });
             continue; // Skip this category and move to the next one
           }
           
           if (!feed || !feed.items || feed.items.length === 0) {
-            console.log(`   No items found in RSS feed for ${category.name}`);
+            logWarn(`   ⚠️ No items found in RSS feed for ${category.name}`);
             continue;
           }
           
-          console.log(`   Found ${feed.items.length} items in RSS feed`);
+          logInfo(`   📄 Found ${feed.items.length} items in RSS feed`, { category: category.name });
           
           // Process each item in the feed
           for (const item of feed.items) {
             try {
               if (!item.link) {
-                console.log(`   Skipping item without link: ${item.title || 'No title'}`);
+                logWarn(`   ⚠️ Skipping item without link: ${item.title || 'No title'}`);
                 continue;
               }
               
-              console.log(`   Processing article: ${item.title || 'No title'}`);
+              logInfo(`   📝 Processing article: ${item.title || 'No title'}`);
               
               const fullText = await fetchFullArticle(item.link);
               
@@ -98,32 +99,36 @@ export async function fetchAndSaveNews() {
                   categoryId: category.categoryId,
                   categoryName: category.name,
                   source: rssUrlDoc.name, 
-                  fullText: fullText
+                  fullText: fullText,
                 });
                 
                 await newsArticle.save();
-                console.log(`   ✅ Saved article: ${item.title || 'No title'}`);
+                logDb('insert', 'newsArticles', { 
+                  title: item.title, 
+                  category: category.name, 
+                  source: rssUrlDoc.name,
+                });
+                logSuccess(`   ✅ Saved article: ${item.title || 'No title'}`);
               } else {
-                console.log(`   ⚠️ Skipping article with insufficient content: ${item.title || 'No title'}`);
+                logWarn(`   ⚠️ Skipping article with insufficient content: ${item.title || 'No title'}`);
               }
               
             } catch (itemError: any) {
-              console.error(`   ❌ Error processing item:`, itemError.message);
+              logError(`   ❌ Error processing item:`, itemError, { title: item.title, url: item.link });
               continue; // Continue with next item
             }
           }
           
         } catch (categoryError: any) {
-          console.error(`❌ Error processing category ${category}:`, categoryError.message);
+          logError(`❌ Error processing category ${category.name}:`, categoryError, { category: category.name, url: category.url });
           continue; // Continue with next category
         }
       }
     }
     
-    console.log('✅ News fetching and saving completed.');
+    logSuccess('✅ News fetching and saving completed.');
   } catch (err: any) {
-    console.error('❌ Error in fetchAndSaveNews:', err.message);
-    console.error('Stack trace:', err.stack);
+    logError('❌ Error in fetchAndSaveNews:', err);
   }
 }
 
@@ -274,7 +279,7 @@ const fetchFullArticle = async (url: string) => {
     
     return content || 'No content extracted.';
   } catch (err: any) {
-    console.error(`❌ Error fetching article from ${url}:`, err.message);
+    logError(`❌ Error fetching article from ${url}:`, err);
     return 'Failed to load article content.';
   }
 };
