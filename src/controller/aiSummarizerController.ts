@@ -39,7 +39,7 @@ export const summarizeArticlesBatch = async (req: Request, res: Response): Promi
         }));
         // Process batch summarization
         const {data} = await axios.post(
-            'http://localhost:8000/summarize',
+            `${process.env.HF_BASEURL}/summarize`,
             articlesForBatch,
             // { timeout: 60000 }
         );
@@ -64,7 +64,7 @@ export const generateAudio = async (req: Request, res: Response): Promise<any> =
         const summaries = await NewsSummaries.find({}).sort({ createdAt: -1 }).limit(1);
         console.log(summaries[0]);
         const { data } = await axios.post(
-            'http://localhost:8000/tts',
+            `${process.env.HF_BASEURL}/tts`,
             summaries[0],
             // { timeout: 60000 }
         );
