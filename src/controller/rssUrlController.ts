@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getRssUrls, insertRssUrls } from '../services/rssURlService';
+import { getRssUrls, insertRssUrls, updateExistingCategoriesWithImages } from '../services/rssURlService';
 import { logInfo, logError, logDb } from '../utils/logger';
 
 const getRssUrlsController = async (req: Request, res: Response) => {
@@ -35,4 +35,21 @@ const insertRssUrlsController = async (req: Request, res: Response) => {
     }
 }
 
-export { getRssUrlsController, insertRssUrlsController };
+const updateCategoriesWithImagesController = async (req: Request, res: Response) => {
+    try {
+        logInfo('🖼️ Updating categories with images', { method: req.method, url: req.url });
+        const result = await updateExistingCategoriesWithImages();
+        if (result && result.status) {
+            logDb('update', 'categories', { success: true });
+            res.status(200).json(result);
+        } else {
+            logError('❌ Failed to update categories with images:', result?.message);
+            res.status(500).json(result);
+        }
+    } catch (error) {
+        logError('❌ Error updating categories with images:', error, { method: req.method, url: req.url });
+        res.status(500).json({ message: 'Error updating categories with images' });
+    }
+}
+
+export { getRssUrlsController, insertRssUrlsController, updateCategoriesWithImagesController };
